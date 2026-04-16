@@ -7,6 +7,7 @@ import { redis } from './services/redis'
 import { registerSocketHandlers } from './services/socket'
 import { authRoutes } from './routes/auth'
 import { sosRoutes } from './routes/sos'
+import { contactsRoutes } from './routes/contacts'
 import { startBatchWriter } from './services/batchWriter'
 import { env } from './config/env'
 
@@ -19,6 +20,7 @@ app.register(fjwt, { secret: env.JWT_SECRET })
 // Routes
 app.register(authRoutes)
 app.register(sosRoutes)
+app.register(contactsRoutes)
 
 // Socket.io
 const io = new Server(app.server, { cors: { origin: '*' } })
