@@ -3,6 +3,9 @@ import { z } from 'zod'
 import { v4 as uuidv4 } from 'uuid'
 import { query } from '../services/postgres'
 import { setSOSActive, redis } from '../services/redis'
+import { notifyFamilyContacts } from '../services/notifications'
+import { generateAgoraToken } from '../services/agora'
+import { findNearestHub, alertResponderHub } from '../services/responder'
 
 const triggerSchema = z.object({
   type: z.enum(['personal', 'third_party']),
@@ -13,8 +16,6 @@ const triggerSchema = z.object({
 export const sosRoutes = async (app: FastifyInstance) => {
 
   // Verify JWT on every request in this scope
-  
-
   app.addHook('preHandler', async (req, reply) => {
     try {
       await req.jwtVerify()
@@ -59,19 +60,34 @@ export const sosRoutes = async (app: FastifyInstance) => {
     await setSOSActive(userId, sessionId)
     await redis.geoadd('sos:locations', lng, lat, userId)
 
+    // Generate Agora token for live stream
+    const agoraToken = generateAgoraToken(agoraChannel)
+
     if (type === 'personal') {
+      // Fetch family contacts and notify
       const contacts = await query(
-        `SELECT phone, name FROM family_contacts WHERE user_id = $1`,
+        `SELECT phone, name, fcm_token FROM family_contacts WHERE user_id = $1`,
         [userId]
       )
-      console.log(`Personal SOS — notifying ${contacts.rows.length} family contacts`)
+      if (contacts.rows.length > 0) {
+        await notifyFamilyContacts(contacts.rows, userId, sessionId, lat, lng)
+      }
     } else {
-      console.log(`Third-party SOS — routing to nearest responder hub`)
+      // Find nearest responder hub and alert
+      const hub = await findNearestHub(lng, lat)
+      if (hub) {
+        await alertResponderHub(hub, sessionId, lat, lng)
+        await query(
+          `UPDATE sos_sessions SET responder_hub_id = $1 WHERE id = $2`,
+          [hub.id, sessionId]
+        )
+      }
     }
 
     return reply.status(201).send({
       sessionId,
       agoraChannel,
+      agoraToken,
       message: 'SOS triggered successfully'
     })
   })
@@ -102,6 +118,6 @@ export const sosRoutes = async (app: FastifyInstance) => {
       [sessionId, userId]
     )
 
-    return reply.send({ message: 'SOS resolved' })
+    return reply.send({ message: 'SOS triggered successfully' })
   })
 }
