@@ -1,15 +1,15 @@
 import axios from 'axios'
 import { env } from '../config/env'
 
-const AGORA_API_URL = 'https://api.agora.io/v1/apps'
+const AGORA_API_URL = 'https://api.agora.io/v1'
 
 interface RecordingConfig {
   channel: string
   uid: number
   token: string
   storageConfig: {
-    vendor: number // 1 = AWS S3
-    region: number // AWS region code
+    vendor: number
+    region: number
     bucket: string
     accessKey: string
     secretKey: string
@@ -23,6 +23,13 @@ export const startCloudRecording = async (
   uid: number = 0,
   token: string
 ): Promise<{ sid: string; resourceId: string } | null> => {
+  // Dev Mode - No Real Credentials
+  if (!env.AGORA_APP_CERT || !env.AWS_ACCESS_KEY_ID) {
+    console.log(`🎥 [DEV] Would start recording for Channel: ${channel}`)
+    console.log(`   Token: ${token.substring(0, 20)}...`)
+    return { sid: 'dev-sid', resourceId: 'dev-resource' }
+  }
+
   try {
     // Get resource ID first
     const resourceRes = await axios.post(
@@ -55,10 +62,10 @@ export const startCloudRecording = async (
           token,
           recordingConfig: {
             maxIdleTime: 30,
-            streamTypes: 2, // Audio + Video
-            channelType: 0, // Live
-            videoStreamType: 0, // High quality
-            transcodingConfig: {
+            streamTypes: 2,
+            channelType: 0,
+            VideoStreamType: 0,
+            TranscodingConfig: {
               height: 640,
               width: 360,
               bitrate: 500,
@@ -67,12 +74,12 @@ export const startCloudRecording = async (
               backgroundColor: '#000000'
             }
           },
-          recordingFileConfig: {
+          RecordingFileConfig: {
             avFileType: ['hls', 'mp4']
           },
-          storageConfig: {
-            vendor: 1, // AWS
-            region: 0, // US East (change as needed)
+          StorageConfig: {
+            vendor: 1,
+            region: parseInt(env.AWS_REGION || 'us-east-1'),
             bucket: env.AWS_S3_BUCKET,
             accessKey: env.AWS_ACCESS_KEY_ID!,
             secretKey: env.AWS_SECRET_ACCESS_KEY!,
@@ -106,6 +113,15 @@ export const stopCloudRecording = async (
   channel: string,
   uid: number = 0
 ): Promise<{ fileList: string[]; serverResponse: any } | null> => {
+  // Dev Mode - No Real Credentials
+  if (sid === 'dev-sid') {
+    console.log(`🎥 [DEV] Would stop recording for Channel: ${channel}`)
+    return { 
+      fileList: [`s3://${env.AWS_S3_BUCKET}/ots-recordings/${channel}/dev-recording.mp4`], 
+      serverResponse: {} 
+    }
+  }
+
   try {
     const res = await axios.post(
       `${AGORA_API_URL}/${env.AGORA_APP_ID}/cloud_recording/resourceid/${resourceId}/sid/${sid}/mode/mix/stop`,
