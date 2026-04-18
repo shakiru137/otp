@@ -85,7 +85,7 @@ export const sosRoutes = async (app: FastifyInstance) => {
       }
     } else {
       // Find nearest responder hub and alert
-      const Hub = await findNearestHub(lng, lat)
+      const hub = await findNearestHub(lng, lat)
       if (hub) {
         await alertResponderHub(hub, sessionId, lat, lng)
         await query(
@@ -99,7 +99,7 @@ export const sosRoutes = async (app: FastifyInstance) => {
       sessionId,
       agoraChannel,
       agoraToken,
-      RecordingSid: recording?.sid,
+      recordingSid: recording?.sid,
       message: 'SOS triggered successfully'
     })
   })
